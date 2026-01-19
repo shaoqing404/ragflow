@@ -91,6 +91,8 @@ export enum DocumentParserType {
   Audio = 'audio',
   Email = 'email',
   Tag = 'tag',
+  Mel = 'mel',
+  ThreeUMel = '3u_mel',
   KnowledgeGraph = 'knowledge_graph',
 }
 

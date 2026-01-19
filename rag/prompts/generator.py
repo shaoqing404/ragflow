@@ -161,6 +161,7 @@ QUESTION_PROMPT_TEMPLATE = load_prompt("question_prompt")
 VISION_LLM_DESCRIBE_PROMPT = load_prompt("vision_llm_describe_prompt")
 VISION_LLM_FIGURE_DESCRIBE_PROMPT = load_prompt("vision_llm_figure_describe_prompt")
 VISION_LLM_FIGURE_DESCRIBE_PROMPT_WITH_CONTEXT = load_prompt("vision_llm_figure_describe_prompt_with_context")
+THREE_U_MEL_VLM_ENHANCE_PROMPT = load_prompt("three_u_mel_vlm_enhance_prompt")
 STRUCTURED_OUTPUT_PROMPT = load_prompt("structured_output_prompt")
 
 ANALYZE_TASK_SYSTEM = load_prompt("analyze_task_system")
@@ -327,6 +328,39 @@ def vision_llm_figure_describe_prompt() -> str:
 def vision_llm_figure_describe_prompt_with_context(context_above: str, context_below: str) -> str:
     template = PROMPT_JINJA_ENV.from_string(VISION_LLM_FIGURE_DESCRIBE_PROMPT_WITH_CONTEXT)
     return template.render(context_above=context_above, context_below=context_below)
+
+
+def three_u_mel_vlm_enhance_prompt(
+    page: int,
+    ata_code: str,
+    nav_title: str,
+    ocr_text: str,
+    cross_page: bool = False,
+    target_name: str = "",
+    doc_span: tuple | None = None,
+    chunk_pages: list | None = None,
+) -> str:
+    """Render the 3U MEL VLM enhancement prompt with MEL/ATA context."""
+    from typing import Sequence
+    template = PROMPT_JINJA_ENV.from_string(THREE_U_MEL_VLM_ENHANCE_PROMPT)
+    if doc_span:
+        doc_span_str = f"{doc_span[0]}-{doc_span[1]}" if doc_span[0] != doc_span[1] else str(doc_span[0])
+    else:
+        doc_span_str = ""
+    if chunk_pages:
+        chunk_pages_str = ", ".join(str(p) for p in chunk_pages)
+    else:
+        chunk_pages_str = str(page)
+    return template.render(
+        page=page,
+        ata_code=ata_code or "",
+        nav_title=nav_title or "",
+        ocr_text=ocr_text or "",
+        cross_page=cross_page,
+        target_name=target_name or ata_code or "",
+        doc_span=doc_span_str,
+        chunk_pages=chunk_pages_str,
+    )
 
 
 def tool_schema(tools_description: list[dict], complete_task=False):

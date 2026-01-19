@@ -218,9 +218,72 @@ def by_plaintext(filename, binary=None, from_page=0, to_page=100000, callback=No
     return sections, tables, pdf_parser
 
 
+def by_three_u(
+    filename,
+    binary=None,
+    from_page=0,
+    to_page=100000,
+    lang="Chinese",
+    callback=None,
+    pdf_cls=None,
+    parse_method: str = "three_u",
+    mineru_llm_name: str | None = None,
+    tenant_id: str | None = None,
+    **kwargs,
+):
+    """
+    3U_MEL专用的MinerU解析入口
+    
+    特点:
+    1. 保留MinerU的text_level字段 (用于可靠的子项检测)
+    2. 使用by_three_u_transfer_to_sections返回4元组: (text, type, tag, text_level)
+    3. 专为3U MEL航空手册优化
+    
+    MinerU的text_level字段标记了标题级别:
+    - text_level: 1 = 一级标题 (对应MEL子项如"25-62-01A 滑梯不工作")
+    - 不存在 = 普通正文
+    """
+    pdf_parser = None
+    if tenant_id:
+        if not mineru_llm_name:
+            try:
+                from api.db.services.tenant_llm_service import TenantLLMService
+
+                env_name = TenantLLMService.ensure_mineru_from_env(tenant_id)
+                candidates = TenantLLMService.query(tenant_id=tenant_id, llm_factory="MinerU", model_type=LLMType.OCR)
+                if candidates:
+                    mineru_llm_name = candidates[0].llm_name
+                elif env_name:
+                    mineru_llm_name = env_name
+            except Exception as e:
+                logging.warning(f"fallback to env mineru: {e}")
+
+        if mineru_llm_name:
+            try:
+                ocr_model = LLMBundle(tenant_id=tenant_id, llm_type=LLMType.OCR, llm_name=mineru_llm_name, lang=lang)
+                pdf_parser = ocr_model.mdl
+                # 使用three_u模式保留text_level
+                sections, tables = pdf_parser.parse_pdf(
+                    filepath=filename,
+                    binary=binary,
+                    callback=callback,
+                    parse_method="three_u",  # 使用three_u模式
+                    lang=lang,
+                    **kwargs,
+                )
+                return sections, tables, pdf_parser
+            except Exception as e:
+                logging.error(f"Failed to parse pdf via LLMBundle MinerU ({mineru_llm_name}): {e}")
+
+    if callback:
+        callback(-1, "MinerU not found for 3U MEL parsing.")
+    return None, None, None
+
+
 PARSERS = {
     "deepdoc": by_deepdoc,
     "mineru": by_mineru,
+    "three_u": by_three_u,  # 3U MEL专用，保留text_level
     "docling": by_docling,
     "tcadp": by_tcadp,
     "paddleocr": by_paddleocr,

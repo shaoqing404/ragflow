@@ -14,6 +14,8 @@ const ParserListMap = new Map([
       'presentation',
       'one',
       'qa',
+      'mel',
+      '3u_mel',
       'knowledge_graph',
     ],
   ],
@@ -104,7 +106,7 @@ export const useFetchParserListOnMount = (documentExtension: string) => {
   return { parserList: nextParserList };
 };
 
-const hideAutoKeywords = ['qa', 'table', 'resume', 'knowledge_graph', 'tag'];
+const hideAutoKeywords = ['qa', 'table', 'resume', 'knowledge_graph', 'tag', 'mel', '3u_mel'];
 
 export const useShowAutoKeywords = () => {
   const showAutoKeywords = useCallback((selectedTag: string) => {

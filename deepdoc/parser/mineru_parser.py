@@ -49,6 +49,8 @@ class MinerUContentType(StrEnum):
     CODE = "code"
     LIST = "list"
     DISCARDED = "discarded"
+    HEADER = "header"
+    PAGE_NUMBER = "page_number"
 
 
 # Mapping from language names to MinerU language codes
@@ -349,6 +351,20 @@ class MinerUParser(RAGFlowPdfParser):
 
         return "@@{}\t{:.1f}\t{:.1f}\t{:.1f}\t{:.1f}##".format("-".join([str(p) for p in pn]), x0, x1, top, bott)
 
+    def by_three_u_line_tag(self, bx):
+        """
+        [three_u专用] 生成像素坐标的 line_tag
+        与 _line_tag() 相同逻辑，但命名清晰表明用途
+        """
+        pn = int(bx.get("page_idx", bx.get("page_id", 0)))
+        bbox_detail = bx.get("poly", bx.get("bbox", [0, 0, 0, 0]))
+        if len(bbox_detail) == 8:
+            left, top = min(bbox_detail[0], bbox_detail[6]), min(bbox_detail[1], bbox_detail[3])
+            right, bottom = max(bbox_detail[2], bbox_detail[4]), max(bbox_detail[5], bbox_detail[7])
+        else:
+            left, top, right, bottom = bbox_detail[:4]
+        return f"{pn}-{left:.1f}-{right:.1f}-{top:.1f}-{bottom:.1f}"
+
     def crop(self, text, ZM=1, need_position=False):
         imgs = []
         poss = self.extract_positions(text)
@@ -564,6 +580,30 @@ class MinerUParser(RAGFlowPdfParser):
                 sections.append((section, self._line_tag(output)))
         return sections
 
+    def by_three_u_transfer_to_sections(self, outputs: list[dict[str, Any]]):
+        """
+        [three_u专用] 保留 text_level 字段的 sections 转换
+        
+        返回四元组: (text, type, tag, text_level)
+        - text_level: 1 = 一级标题 (对应MEL子项如"25-62-01A 滑梯不工作")
+        - None = 普通正文
+        
+        用于 three_u_splitting.py 的 extract_inner_codes_with_text_level() 子项边界检测
+        """
+        sections = []
+        for bx in outputs:
+            content_type = bx.get("type", MinerUContentType.TEXT)
+            tag = self._line_tag(bx)
+            text_level = bx.get("text_level")
+            
+            if content_type in (MinerUContentType.IMAGE, MinerUContentType.TABLE):
+                img_path = bx.get("img_path", "")
+                sections.append((f"![{content_type}]({img_path})", content_type, tag, text_level))
+            else:
+                text = bx.get("text", "")
+                sections.append((text, content_type, tag, text_level))
+        return sections
+
     def _transfer_to_tables(self, outputs: list[dict[str, Any]]):
         return []
 
@@ -646,6 +686,9 @@ class MinerUParser(RAGFlowPdfParser):
             if callback:
                 callback(0.75, f"[MinerU] Parsed {len(outputs)} blocks from PDF.")
 
+            # 3U MEL: 使用专用的transfer方法保留text_level
+            if parse_method == "three_u":
+                return self.by_three_u_transfer_to_sections(outputs), self._transfer_to_tables(outputs)
             return self._transfer_to_sections(outputs, parse_method), self._transfer_to_tables(outputs)
         finally:
             if temp_pdf and temp_pdf.exists():
