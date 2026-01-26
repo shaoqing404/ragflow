@@ -19,6 +19,7 @@
 | `three_u_semantic_merge.py` | 8KB | `rag/app/` |
 | `three_u_splitting.py` | 27KB | `rag/app/` |
 | `three_u_storage_utils.py` | 7KB | `rag/app/` |
+| `link_hierarchy_extractor.py` | - | `rag/app/` |
 
 ### VLM Enhancer
 | File | Target Path |
@@ -40,10 +41,16 @@
   - Added imports: `mel_navigation_parser`, `three_u_mel_navigation_parser`
   - Added FACTORY entries: `"mel"`, `"3u_mel"`
 
+- **`rag/app/naive.py`**
+  - Added parser entry: `by_three_u()` and `PARSERS["three_u"]`
+
 - **`deepdoc/parser/mineru_parser.py`**
   - Added enum: `MinerUContentType.HEADER`, `MinerUContentType.PAGE_NUMBER`
   - Added method: `by_three_u_line_tag()`
   - Added method: `by_three_u_transfer_to_sections()`
+
+- **`rag/prompts/generator.py`**
+  - Added `three_u_mel_vlm_enhance_prompt()` wrapper for the prompt file
 
 ### Frontend
 - **`web/src/constants/knowledge.ts`**
@@ -59,7 +66,7 @@
 
 **Finding**: No code changes needed in 3U parsers themselves.
 
-The 3U MEL parsers are **synchronous** Python code (`def chunk(...)`). In v0.23.1's asyncio framework, they are automatically wrapped via `asyncio.to_thread()` (see `task_executor.py` L265-276).
+The 3U MEL parsers are **synchronous** Python code (`def chunk(...)`). In v0.23.1's asyncio framework, they are executed in a thread pool via `thread_pool_exec(...)` (see `common/misc_utils.py`), which uses `loop.run_in_executor(...)` under the hood (see `task_executor.py` around the chunking path).
 
 **Original (trio)**:
 ```python
@@ -70,7 +77,7 @@ async with chunk_limiter:
 **Target (asyncio)**:
 ```python
 async with chunk_limiter:
-    cks = await asyncio.to_thread(chunker.chunk, ...)
+    cks = await thread_pool_exec(chunker.chunk, ...)
 ```
 
 ---
