@@ -3,11 +3,50 @@
 This file documents the recommended sync workflow for the `three_u_0231` branch
 and how Project Management AI should handle conflicts and pushes to Gitee.
 
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Official Repository                          │
+│            github.com/infiniflow/ragflow                        │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ auto-sync (GitHub Actions)
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    origin (GitHub Fork)                         │
+│            github.com/shaoqing404/ragflow                       │
+│            Purpose: Track official updates (READ-ONLY)          │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ git fetch origin / git merge origin/main
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Local Workstation                            │
+│            Branch: three_u_0231                                 │
+│            Purpose: Development & customization workspace       │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │ git push gitee three_u_0231
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    gitee (Deployment Target)                    │
+│            gitee.com/GFCM/ragflow                               │
+│            Purpose: Distribution to production servers          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Goals
-- Keep `three_u_0231` tracking upstream (official) changes.
-- Preserve local customizations in `three_u_0231`.
-- Push updates to `gitee/three_u_0231` and, when approved, force-sync to
-  `gitee/master`.
+- Keep `three_u_0231` tracking origin (GitHub fork that syncs official) changes.
+- Preserve local customizations (3U MEL parsers, etc.) in `three_u_0231`.
+- Push updates **ONLY to gitee**, which handles server deployment.
+
+## Git Remote Configuration
+- **origin**: `https://github.com/shaoqing404/ragflow.git`
+  - Personal GitHub fork that auto-syncs with official `infiniflow/ragflow`
+  - **READ-ONLY** - only used for `git fetch` and `git merge`
+  - Never push local changes to origin
+- **gitee**: `git@gitee.com:GFCM/ragflow.git`
+  - Deployment target repository
+  - **WRITE** - all local modifications are pushed here
+  - Gitee handles distribution to production servers
 
 ## Recommended Workflow (merge-based)
 Use merge to keep history clear and reduce rebase risks.
@@ -25,15 +64,15 @@ git commit -m "wip: local changes"
 # OR stash:
 git stash -u
 
-# 3) Bring in official updates
-git fetch upstream
-git merge upstream/main
+# 3) Bring in official updates from origin (GitHub fork)
+git fetch origin
+git merge origin/main
 
 # 4) Resolve conflicts if any, then commit the merge
 git add <conflict-files>
 git commit
 
-# 5) Push to Gitee
+# 5) Push to Gitee ONLY (not origin!)
 git push gitee three_u_0231
 ```
 
@@ -52,14 +91,14 @@ Only use rebase if you need a clean linear history and understand the risks.
 
 ```bash
 git checkout three_u_0231
-git fetch upstream
-git rebase upstream/main
+git fetch origin
+git rebase origin/main
 
 # resolve conflicts
 git add <conflict-files>
 git rebase --continue
 
-# push updated history
+# push updated history to Gitee ONLY
 git push gitee three_u_0231 --force-with-lease
 ```
 
@@ -73,8 +112,8 @@ git push gitee three_u_0231:master --force
 
 ## Project Management AI Handoff (role notes)
 - Primary branch: `three_u_0231`
-- Official source: `upstream/main`
-- Gitee target: `gitee/three_u_0231`
+- Official source: `origin/main` (GitHub fork that auto-syncs with infiniflow/ragflow)
+- Push target: `gitee/three_u_0231` **ONLY** (never push to origin)
 - When instructed, force-sync `gitee/master` from `three_u_0231`
 - If conflicts arise:
   - Prefer keeping 3U logic and recent local changes.
@@ -84,3 +123,4 @@ git push gitee three_u_0231:master --force
 - `git status -sb` before and after merges.
 - `git log --oneline -5` after merging to verify the merge commit.
 - Never force-push unless explicitly approved.
+- Never push to origin (it's read-only for tracking official updates).
