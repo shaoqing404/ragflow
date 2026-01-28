@@ -87,7 +87,7 @@ class LayoutRecognizer(Recognizer):
                     "x1": b["bbox"][2] / scale_factor,
                     "top": b["bbox"][1] / scale_factor,
                     "bottom": b["bbox"][-1] / scale_factor,
-                    "page_number": pn,
+                    "page_number": pn + 1,
                 }
                 for b in lts
                 if float(b["score"]) >= 0.4 or b["type"] not in self.garbage_layouts
@@ -375,7 +375,7 @@ class AscendLayoutRecognizer(Recognizer):
                                     "x1": float(x1) / scale_factor,
                                     "top": float(y0) / scale_factor,
                                     "bottom": float(y1) / scale_factor,
-                                    "page_number": len(layouts_all_pages),
+                                    "page_number": len(layouts_all_pages) + 1,
                                 }
                             )
                     layouts_all_pages.append(page_lts)

@@ -124,3 +124,4 @@ git push gitee three_u_0231:master --force
 - `git log --oneline -5` after merging to verify the merge commit.
 - Never force-push unless explicitly approved.
 - Never push to origin (it's read-only for tracking official updates).
+ - Note: Quart reloader can trigger `execv` restarts and wrong interpreter; keep `QUART_RUN_RELOAD=0` until upstream addresses it.

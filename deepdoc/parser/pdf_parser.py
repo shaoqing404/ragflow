@@ -471,11 +471,12 @@ class RAGFlowPdfParser:
 
                 # Filter out original boxes within the table region
                 original_box_count = len(self.boxes)
+                rel_page_num = page + 1
                 self.boxes = [
                     b
                     for b in self.boxes
                     if not (
-                        b.get("page_number") == page + self.page_from
+                        b.get("page_number") == rel_page_num
                         and b.get("layout_type") == "table"
                         and b["x0"] >= table_x0 - 5
                         and b["x1"] <= table_x1 + 5
@@ -511,7 +512,7 @@ class RAGFlowPdfParser:
                         "x1": box_x1 + table_x0,
                         "top": box_top + table_top + self.page_cum_height[page],
                         "bottom": box_bottom + table_top + self.page_cum_height[page],
-                        "page_number": page + self.page_from,
+                        "page_number": rel_page_num,
                         "layout_type": "table",
                         "layoutno": f"table-{table_index}",
                         "_rotated": True,

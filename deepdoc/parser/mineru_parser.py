@@ -132,6 +132,8 @@ class MinerUParseOptions:
     parse_method: str = "raw"
     formula_enable: bool = True
     table_enable: bool = True
+    start_page_id: int = 0
+    end_page_id: int = 99999
 
 
 class MinerUParser(RAGFlowPdfParser):
@@ -273,8 +275,8 @@ class MinerUParser(RAGFlowPdfParser):
             "return_content_list": True,
             "return_images": True,
             "response_format_zip": True,
-            "start_page_id": 0,
-            "end_page_id": 99999,
+            "start_page_id": options.start_page_id,
+            "end_page_id": options.end_page_id,
         }
 
         if options.server_url:
@@ -631,6 +633,18 @@ class MinerUParser(RAGFlowPdfParser):
         mineru_method_raw_str = parser_cfg.get('mineru_parse_method', 'auto')
         enable_formula = parser_cfg.get('mineru_formula_enable', True)
         enable_table = parser_cfg.get('mineru_table_enable', True)
+        page_from = kwargs.get("from_page", 0)
+        page_to = kwargs.get("to_page", 100000)
+        try:
+            page_from = int(page_from or 0)
+        except Exception:
+            page_from = 0
+        try:
+            page_to = int(page_to or 0)
+        except Exception:
+            page_to = 100000
+        if page_to <= page_from:
+            page_to = page_from + 1
 
         # remove spaces, or mineru crash, and _read_output fail too
         file_path = Path(filepath)
@@ -667,7 +681,7 @@ class MinerUParser(RAGFlowPdfParser):
         if callback:
             callback(0.15, f"[MinerU] Output directory: {out_dir}")
 
-        self.__images__(pdf, zoomin=1)
+        self.__images__(pdf, zoomin=1, page_from=page_from, page_to=page_to)
 
         try:
             options = MinerUParseOptions(
@@ -679,6 +693,8 @@ class MinerUParser(RAGFlowPdfParser):
                 parse_method=parse_method,
                 formula_enable=enable_formula,
                 table_enable=enable_table,
+                start_page_id=page_from,
+                end_page_id=page_to - 1,
             )
             final_out_dir = self._run_mineru(pdf, out_dir, options, callback=callback)
             outputs = self._read_output(final_out_dir, pdf.stem, method=mineru_method_raw_str, backend=backend)

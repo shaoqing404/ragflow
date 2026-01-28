@@ -107,6 +107,8 @@ def by_mineru(
                     callback=callback,
                     parse_method=parse_method,
                     lang=lang,
+                    from_page=from_page,
+                    to_page=to_page,
                     **kwargs,
                 )
                 return sections, tables, pdf_parser
@@ -253,8 +255,10 @@ def by_three_u(
                 candidates = TenantLLMService.query(tenant_id=tenant_id, llm_factory="MinerU", model_type=LLMType.OCR)
                 if candidates:
                     mineru_llm_name = candidates[0].llm_name
+                    logging.info(f"3U_MEL MinerU found in DB: {mineru_llm_name}")
                 elif env_name:
                     mineru_llm_name = env_name
+                    logging.info(f"3U_MEL MinerU from env: {mineru_llm_name}")
             except Exception as e:
                 logging.warning(f"fallback to env mineru: {e}")
 
@@ -269,11 +273,15 @@ def by_three_u(
                     callback=callback,
                     parse_method="three_u",  # 使用three_u模式
                     lang=lang,
+                    from_page=from_page,
+                    to_page=to_page,
                     **kwargs,
                 )
                 return sections, tables, pdf_parser
             except Exception as e:
                 logging.error(f"Failed to parse pdf via LLMBundle MinerU ({mineru_llm_name}): {e}")
+    else:
+        logging.warning("3U_MEL MinerU requires tenant_id, got None.")
 
     if callback:
         callback(-1, "MinerU not found for 3U MEL parsing.")
