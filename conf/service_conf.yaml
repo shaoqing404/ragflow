@@ -7,7 +7,7 @@ admin:
 mysql:
   name: 'rag_flow'
   user: 'root'
-  password: 'infini_rag_flow'
+  password: 'Wintelia_zxq123_mysql'
   host: 'localhost'
   port: 5455
   max_connections: 900
@@ -15,14 +15,14 @@ mysql:
   max_allowed_packet: 1073741824
 minio:
   user: 'rag_flow'
-  password: 'infini_rag_flow'
+  password: 'Wintelia_zxq123_minio'
   host: 'localhost:9000'
   bucket: ''
   prefix_path: ''
 es:
   hosts: 'http://localhost:1200'
   username: 'elastic'
-  password: 'infini_rag_flow'
+  password: 'Wintelia_zxq123_es'
 os:
   hosts: 'http://localhost:1201'
   username: 'admin'
@@ -42,11 +42,12 @@ oceanbase:
 redis:
   db: 1
   username: ''
-  password: 'infini_rag_flow'
+  password: 'Wintelia_zxq123_redis'
   host: 'localhost:6379'
 task_executor:
   message_queue_type: 'redis'
 user_default_llm:
+  parsers: "naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio,email:Email,tag:Tag,mel:CA_MEL,3u_mel:3U_MEL"
   default_models:
     embedding_model:
       api_key: 'xxx'

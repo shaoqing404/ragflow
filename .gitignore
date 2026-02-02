@@ -59,6 +59,9 @@ docker/oceanbase/data
 # SeekDB data and conf
 docker/seekdb
 
+# server-specific configs
+spec/server/
+
 
 #--------------------------------------------------#
 # The following was generated with gitignore.nvim: #
