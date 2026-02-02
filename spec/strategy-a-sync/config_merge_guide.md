@@ -23,6 +23,25 @@ user_default_llm:
 
 ---
 
+## 1.1 前端解析器下拉来源（重要）
+
+前端解析器下拉列表不仅来自 `service_conf.yaml` 的 `user_default_llm.parsers`，
+还依赖数据库 `tenant.parser_ids` 的初始化数据。
+
+### 初始化数据位置
+`api/db/init_data.py` 里有硬编码的 `parser_ids`，需包含 `mel` 和 `3u_mel`：
+
+```python
+# 修复前
+"parser_ids": "naive:General,...,tag:Tag"
+
+# 修复后
+"parser_ids": "naive:General,...,tag:Tag,mel:CA_MEL,3u_mel:3U_MEL"
+```
+
+> 如果数据库中 `tenant.parser_ids` 还没有 `mel/3u_mel`，需要重新处理初始化数据
+> 或手动更新该字段，否则前端下拉不会显示。
+
 ## 2. docker/.env 合并
 
 ### 需要添加的 3U MEL 配置块（建议放在 L180 后）：

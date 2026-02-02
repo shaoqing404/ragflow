@@ -31,7 +31,7 @@ from api.db.services.tenant_llm_service import LLMFactoriesService, TenantLLMSer
 from api.db.services.llm_service import LLMService, LLMBundle, get_init_tenant_llm
 from api.db.services.user_service import TenantService, UserTenantService
 from api.db.services.system_settings_service import SystemSettingsService
-from api.db.joint_services.memory_message_service import init_message_id_sequence, init_memory_size_cache
+from api.db.joint_services.memory_message_service import init_message_id_sequence, init_memory_size_cache, fix_missing_tokenized_memory
 from common.constants import LLMType
 from common.file_utils import get_project_base_directory
 from common import settings
@@ -121,7 +121,7 @@ def init_llm_factory():
     TenantLLMService.filter_update([TenantLLMService.model.llm_factory == "QAnything"], {"llm_factory": "Youdao"})
     TenantLLMService.filter_update([TenantLLMService.model.llm_factory == "cohere"], {"llm_factory": "Cohere"})
     TenantService.filter_update([1 == 1], {
-        "parser_ids": "naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio,email:Email,tag:Tag"})
+        "parser_ids": "naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio,email:Email,tag:Tag,mel:CA_MEL,3u_mel:3U_MEL"})
     ## insert openai two embedding models to the current openai user.
     # print("Start to insert 2 OpenAI embedding models...")
     tenant_ids = set([row["tenant_id"] for row in TenantLLMService.get_openai_models()])
@@ -175,6 +175,7 @@ def init_web_data():
     add_graph_templates()
     init_message_id_sequence()
     init_memory_size_cache()
+    fix_missing_tokenized_memory()
     logging.info("init web data success:{}".format(time.time() - start_time))
 
 def init_table():

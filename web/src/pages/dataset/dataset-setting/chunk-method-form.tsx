@@ -8,6 +8,7 @@ import { EmailConfiguration } from './configuration/email';
 import { KnowledgeGraphConfiguration } from './configuration/knowledge-graph';
 import { LawsConfiguration } from './configuration/laws';
 import { ManualConfiguration } from './configuration/manual';
+import { MelConfiguration } from './configuration/mel';
 import { NaiveConfiguration } from './configuration/naive';
 import { OneConfiguration } from './configuration/one';
 import { PaperConfiguration } from './configuration/paper';
@@ -17,6 +18,7 @@ import { QAConfiguration } from './configuration/qa';
 import { ResumeConfiguration } from './configuration/resume';
 import { TableConfiguration } from './configuration/table';
 import { TagConfiguration } from './configuration/tag';
+import { ThreeUMelConfiguration } from './configuration/three-u-mel';
 
 const ConfigurationComponentMap = {
   [DocumentParserType.Naive]: NaiveConfiguration,
@@ -33,6 +35,8 @@ const ConfigurationComponentMap = {
   [DocumentParserType.Audio]: AudioConfiguration,
   [DocumentParserType.Email]: EmailConfiguration,
   [DocumentParserType.Tag]: TagConfiguration,
+  [DocumentParserType.Mel]: MelConfiguration,
+  [DocumentParserType.ThreeUMel]: ThreeUMelConfiguration,
   [DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration,
 };
 

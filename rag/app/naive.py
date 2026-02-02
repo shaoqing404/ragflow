@@ -38,6 +38,7 @@ from deepdoc.parser.figure_parser import VisionFigureParser, vision_figure_parse
 from deepdoc.parser.pdf_parser import PlainParser, VisionParser
 from deepdoc.parser.docling_parser import DoclingParser
 from deepdoc.parser.tcadp_parser import TCADPParser
+from common.float_utils import normalize_overlapped_percent
 from common.parser_config_utils import normalize_layout_recognizer
 from rag.nlp import (
     concat_img,
@@ -107,6 +108,8 @@ def by_mineru(
                     callback=callback,
                     parse_method=parse_method,
                     lang=lang,
+                    from_page=from_page,
+                    to_page=to_page,
                     **kwargs,
                 )
                 return sections, tables, pdf_parser
@@ -253,8 +256,10 @@ def by_three_u(
                 candidates = TenantLLMService.query(tenant_id=tenant_id, llm_factory="MinerU", model_type=LLMType.OCR)
                 if candidates:
                     mineru_llm_name = candidates[0].llm_name
+                    logging.info(f"3U_MEL MinerU found in DB: {mineru_llm_name}")
                 elif env_name:
                     mineru_llm_name = env_name
+                    logging.info(f"3U_MEL MinerU from env: {mineru_llm_name}")
             except Exception as e:
                 logging.warning(f"fallback to env mineru: {e}")
 
@@ -269,11 +274,15 @@ def by_three_u(
                     callback=callback,
                     parse_method="three_u",  # 使用three_u模式
                     lang=lang,
+                    from_page=from_page,
+                    to_page=to_page,
                     **kwargs,
                 )
                 return sections, tables, pdf_parser
             except Exception as e:
                 logging.error(f"Failed to parse pdf via LLMBundle MinerU ({mineru_llm_name}): {e}")
+    else:
+        logging.warning("3U_MEL MinerU requires tenant_id, got None.")
 
     if callback:
         callback(-1, "MinerU not found for 3U MEL parsing.")
@@ -1046,12 +1055,11 @@ def chunk(filename, binary=None, from_page=0, to_page=100000, lang="Chinese", ca
         raise NotImplementedError("file type not supported yet(pdf, xlsx, doc, docx, txt supported)")
 
     st = timer()
+    overlapped_percent = normalize_overlapped_percent(parser_config.get("overlapped_percent", 0))
     if is_markdown:
         merged_chunks = []
         merged_images = []
         chunk_limit = max(0, int(parser_config.get("chunk_token_num", 128)))
-        overlapped_percent = int(parser_config.get("overlapped_percent", 0))
-        overlapped_percent = max(0, min(overlapped_percent, 90))
 
         current_text = ""
         current_tokens = 0
@@ -1100,10 +1108,10 @@ def chunk(filename, binary=None, from_page=0, to_page=100000, lang="Chinese", ca
                 section_images = None
 
         if section_images:
-            chunks, images = naive_merge_with_images(sections, section_images, int(parser_config.get("chunk_token_num", 128)), parser_config.get("delimiter", "\n!?。；！？"))
+            chunks, images = naive_merge_with_images(sections, section_images, int(parser_config.get("chunk_token_num", 128)), parser_config.get("delimiter", "\n!?。；！？"), overlapped_percent)
             res.extend(tokenize_chunks_with_images(chunks, doc, is_english, images, child_delimiters_pattern=child_deli))
         else:
-            chunks = naive_merge(sections, int(parser_config.get("chunk_token_num", 128)), parser_config.get("delimiter", "\n!?。；！？"))
+            chunks = naive_merge(sections, int(parser_config.get("chunk_token_num", 128)), parser_config.get("delimiter", "\n!?。；！？"), overlapped_percent)
 
             res.extend(tokenize_chunks(chunks, doc, is_english, pdf_parser, child_delimiters_pattern=child_deli))
 

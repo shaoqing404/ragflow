@@ -18,6 +18,7 @@ from rag.nlp import rag_tokenizer, tokenize_chunks, is_english, tokenize, add_po
 from rag.app.mel_chunking.vlm_enhancer import MelVLMEnhancer
 from common.constants import LLMType
 from api.db.services.tenant_llm_service import TenantLLMService
+from common.parser_config_utils import normalize_layout_recognizer
 
 # 🆕 Import refactored modules with text_level support
 from rag.app.three_u_splitting import (
@@ -94,7 +95,7 @@ def _env_get_int(*keys: str, default: Optional[int] = None) -> Optional[int]:
         return default
 
 
-def _resolve_layout_parser(parser_config: Optional[Dict[str, Any]]) -> Tuple[str, Any]:
+def _resolve_layout_parser(parser_config: Optional[Dict[str, Any]]) -> Tuple[str, Any, Optional[str]]:
     """
     解析layout parser配置
     
@@ -105,6 +106,7 @@ def _resolve_layout_parser(parser_config: Optional[Dict[str, Any]]) -> Tuple[str
     layout = cfg.get("layout_recognize", "DeepDOC")
     if isinstance(layout, bool):
         layout = "DeepDOC" if layout else "Plain Text"
+    layout, parser_model_name = normalize_layout_recognizer(layout)
     layout = (layout or "DeepDOC").strip()
     
     # 🆕 MinerU时使用three_u入口,保留text_level
@@ -116,7 +118,34 @@ def _resolve_layout_parser(parser_config: Optional[Dict[str, Any]]) -> Tuple[str
     else:
         parser_func = PARSERS.get(layout_lower, by_deepdoc)
     
-    return layout, parser_func
+    return layout, parser_func, parser_model_name
+
+
+def _should_offset_tag_pages(parser_config: Dict[str, Any], layout_recognizer: str, pdf_parser: Any) -> bool:
+    """
+    Determine whether tag page numbers are relative to the current segment and need offsetting.
+    - Explicit override: parser_config["tag_page_is_relative"] if provided.
+    - MinerU: assume absolute (no offset).
+    - Others (DeepDoc/PaddleOCR/etc.): assume relative when segmented.
+    """
+    if "tag_page_is_relative" in parser_config:
+        return bool(parser_config["tag_page_is_relative"])
+
+    layout_lower = (layout_recognizer or "").strip().lower()
+    if layout_lower in {"mineru", "three_u"}:
+        return False
+
+    try:
+        from deepdoc.parser.mineru_parser import MinerUParser
+
+        if isinstance(pdf_parser, MinerUParser):
+            return False
+    except Exception:
+        pass
+
+    return True
+
+
 
 
 def _probe_primary_vlm_model(tenant_id: Optional[str]) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -491,7 +520,7 @@ def _chunk_impl(filename, binary=None, from_page=0, to_page=100000, **kwargs):
 
     # --- 2. 选择处理模式：测试模式 vs 全量模式 ---
     parser_config = copy.deepcopy(kwargs.get("parser_config") or {})
-    layout_recognizer, parser_entry = _resolve_layout_parser(parser_config)
+    layout_recognizer, parser_entry, parser_model_name = _resolve_layout_parser(parser_config)
     logger.info("[3U_MEL] Using OCR parser: %s", layout_recognizer)
     result_chunks = []  # This will store the final, fully-processed chunks
 
@@ -669,6 +698,7 @@ def _chunk_impl(filename, binary=None, from_page=0, to_page=100000, **kwargs):
                 callback=callback,
                 layout_recognizer=layout_recognizer,
                 tenant_id=tenant_id,
+                mineru_llm_name=parser_model_name,
             )
 
             if not ocr_sections:
@@ -678,6 +708,12 @@ def _chunk_impl(filename, binary=None, from_page=0, to_page=100000, **kwargs):
             if pdf_parser is None:
                 logger.error("3U_MEL: OCR parser did not return PdfParser context for '%s'. Skipping target.", true_ata_code)
                 continue
+
+            tag_page_offset = 0
+            if _should_offset_tag_pages(parser_config, layout_recognizer, pdf_parser):
+                tag_page_offset = int(getattr(pdf_parser, "page_from", start_page - 1) or 0)
+                if tag_page_offset < 0:
+                    tag_page_offset = 0
 
             parsed_sections = ocr_sections
 
@@ -1053,7 +1089,7 @@ def _chunk_impl(filename, binary=None, from_page=0, to_page=100000, **kwargs):
                     m = re.search(r"@@([0-9]+)", candidate_text or "")
                     if m:
                         try:
-                            page_hint = int(m.group(1))
+                            page_hint = int(m.group(1)) + (tag_page_offset or 0)
                         except Exception:
                             page_hint = None
                     
@@ -1169,7 +1205,7 @@ def _chunk_impl(filename, binary=None, from_page=0, to_page=100000, **kwargs):
                     for match in re.finditer(r'@@([0-9]+)\t([0-9.]+)\t([0-9.]+)\t([0-9.]+)\t([0-9.]+)##', 
                                             chunk_doc["content_with_weight"]):
                         try:
-                            page = int(match.group(1))
+                            page = int(match.group(1)) + (tag_page_offset or 0)
                             left = float(match.group(2))
                             right = float(match.group(3))
                             top = float(match.group(4))
