@@ -19,7 +19,6 @@ import { Input, NumberInput } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { LlmModelType } from '@/constants/knowledge';
 import { useFindLlmByUuid } from '@/hooks/use-llm-request';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { get } from 'lodash';
@@ -162,7 +161,7 @@ function AgentForm({ node }: INextOperatorForm) {
         <FormWrapper>
           {isSubAgent && <DescriptionField></DescriptionField>}
           <LargeModelFormField showSpeech2TextModel></LargeModelFormField>
-          {findLlmByUuid(llmId)?.model_type === LlmModelType.Image2text && (
+          {findLlmByUuid(llmId)?.tags?.includes('IMAGE2TEXT') && (
             <QueryVariable
               name="visual_files_var"
               label="Visual Input File"
