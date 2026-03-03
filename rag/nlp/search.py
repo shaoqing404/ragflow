@@ -193,16 +193,18 @@ class Dealer:
                         i += 1
                     pieces_.append("".join(pieces[st: i]) + "\n")
                 else:
+                    # Sentence boundary regex includes Arabic punctuation (، ؛ ؟ ۔)
                     pieces_.extend(
                         re.split(
-                            r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])",
+                            r"([^\|][；。？!！،؛؟۔\n]|[a-z\u0600-\u06FF][.?;!،؛؟][ \n])",
                             pieces[i]))
                     i += 1
             pieces = pieces_
         else:
-            pieces = re.split(r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])", answer)
+            # Sentence boundary regex includes Arabic punctuation (، ؛ ؟ ۔)
+            pieces = re.split(r"([^\|][；。？!！،؛؟۔\n]|[a-z\u0600-\u06FF][.?;!،؛؟][ \n])", answer)
         for i in range(1, len(pieces)):
-            if re.match(r"([^\|][；。？!！\n]|[a-z][.?;!][ \n])", pieces[i]):
+            if re.match(r"([^\|][；。？!！،؛؟۔\n]|[a-z\u0600-\u06FF][.?;!،؛؟][ \n])", pieces[i]):
                 pieces[i - 1] += pieces[i][0]
                 pieces[i] = pieces[i][1:]
         idx = []
@@ -434,7 +436,9 @@ class Dealer:
 
         sorted_idx = np.argsort(sim_np * -1)
 
-        valid_idx = [int(i) for i in sorted_idx if sim_np[i] >= similarity_threshold]
+        # When vector_similarity_weight is 0, similarity_threshold is not meaningful for term-only scores.
+        post_threshold = 0.0 if vector_similarity_weight <= 0 else similarity_threshold
+        valid_idx = [int(i) for i in sorted_idx if sim_np[i] >= post_threshold]
         filtered_count = len(valid_idx)
         ranks["total"] = int(filtered_count)
 
@@ -628,7 +632,7 @@ class Dealer:
             if cid in id2idx:
                 chunks[id2idx[cid]]["similarity"] += sim
                 continue
-            chunk = self.dataStore.get(cid, idx_nms, kb_ids)
+            chunk = self.dataStore.get(cid, idx_nms[0], kb_ids)
             if not chunk:
                 continue
             d = {
@@ -678,7 +682,7 @@ class Dealer:
 
         vector_size = 1024
         for id, cks in mom_chunks.items():
-            chunk = self.dataStore.get(id, idx_nms, [ck["kb_id"] for ck in cks])
+            chunk = self.dataStore.get(id, idx_nms[0], [ck["kb_id"] for ck in cks])
             d = {
                 "chunk_id": id,
                 "content_ltks": " ".join([ck["content_ltks"] for ck in cks]),

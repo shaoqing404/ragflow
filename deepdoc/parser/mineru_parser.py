@@ -75,6 +75,7 @@ LANGUAGE_TO_MINERU_MAP = {
     'Thai': 'th',
     'Greek': 'el',
     'Hindi': 'devanagari',
+    'Bulgarian': 'cyrillic',
 }
 
 
