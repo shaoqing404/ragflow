@@ -1040,6 +1040,38 @@ class API4Conversation(DataBaseModel):
         db_table = "api_4_conversation"
 
 
+class ChatTraceTurn(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    tenant_id = CharField(max_length=32, null=False, index=True)
+    dialog_id = CharField(max_length=32, null=False, index=True)
+    session_id = CharField(max_length=32, null=False, index=True)
+    source = CharField(max_length=16, null=False, default="chatbot", help_text="chatbot|chat|agentbot|agent", index=True)
+    turn_no = IntegerField(default=1, index=True)
+    user_message_id = CharField(max_length=64, null=True, index=True)
+    assistant_message_id = CharField(max_length=64, null=True, index=True)
+    request_question = LongTextField(null=True, help_text="raw user question")
+    request_payload = JSONField(null=True, default={})
+    history_snapshot = JSONField(null=True, default=[])
+    refined_questions = JSONField(null=True, default=[])
+    model_input_messages = JSONField(null=True, default=[])
+    system_prompt_rendered = LongTextField(null=True, help_text="rendered system prompt after parameter injection")
+    knowledge_text = LongTextField(null=True, help_text="knowledge text appended into the prompt")
+    retrieval_snapshot = JSONField(null=True, default={})
+    response_reference = JSONField(null=True, default={})
+    llm_name = CharField(max_length=255, null=True, index=True)
+    llm_factory = CharField(max_length=128, null=True, index=True)
+    think_content = LongTextField(null=True)
+    answer_content = LongTextField(null=True)
+    full_response = LongTextField(null=True)
+    prompt_snapshot = LongTextField(null=True, help_text="final prompt summary returned by dialog service")
+    timing_metrics = JSONField(null=True, default={})
+    status = CharField(max_length=16, null=False, default="running", index=True)
+    error_message = LongTextField(null=True)
+
+    class Meta:
+        db_table = "chat_trace_turn"
+
+
 class UserCanvas(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
     avatar = TextField(null=True, help_text="avatar base64 string")

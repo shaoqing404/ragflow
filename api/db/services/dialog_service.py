@@ -32,6 +32,7 @@ from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.langfuse_service import TenantLangfuseService
 from api.db.services.llm_service import LLMBundle
+from api.db.services.chat_trace_service import ChatTraceTurnService
 from common.metadata_utils import apply_meta_data_filter
 from api.db.services.tenant_llm_service import TenantLLMService
 from api.db.joint_services.tenant_model_service import get_model_config_by_id, get_model_config_by_type_and_name, get_tenant_default_model_by_type
@@ -203,7 +204,7 @@ class DialogService(CommonService):
         return list(objs)
 
 
-async def async_chat_solo(dialog, messages, stream=True):
+async def async_chat_solo(dialog, messages, stream=True, **kwargs):
     llm_type = TenantLLMService.llm_id2llm_type(dialog.llm_id)
     attachments = ""
     image_attachments = []
@@ -217,6 +218,7 @@ async def async_chat_solo(dialog, messages, stream=True):
     model_config = get_model_config_by_id(dialog.tenant_llm_id)
     chat_mdl = LLMBundle(dialog.tenant_id, model_config)
     factory = model_config.get("llm_factory", "") if model_config else ""
+    trace_turn_id = kwargs.get("chat_trace_turn_id")
 
     prompt_config = dialog.prompt_config
     tts_mdl = None
@@ -228,17 +230,38 @@ async def async_chat_solo(dialog, messages, stream=True):
         msg[-1]["content"] += attachments
     if llm_type == "chat" and image_attachments:
         convert_last_user_msg_to_multimodal(msg, image_attachments, factory)
+    if trace_turn_id:
+        ChatTraceTurnService.update_turn(
+            trace_turn_id,
+            refined_questions=[messages[-1].get("content", "")],
+            model_input_messages=deepcopy([{"role": "system", "content": prompt_config.get("system", "")}] + msg),
+            system_prompt_rendered=prompt_config.get("system", ""),
+            knowledge_text="",
+            retrieval_snapshot={},
+            llm_name=(model_config or {}).get("llm_name", ""),
+            llm_factory=factory,
+        )
     if stream:
         if llm_type == "chat":
             stream_iter = chat_mdl.async_chat_streamly_delta(prompt_config.get("system", ""), msg, dialog.llm_setting)
         else:
             stream_iter = chat_mdl.async_chat_streamly_delta(prompt_config.get("system", ""), msg, dialog.llm_setting, images=image_files)
+        last_state = None
         async for kind, value, state in _stream_with_think_delta(stream_iter):
+            last_state = state
             if kind == "marker":
                 flags = {"start_to_think": True} if value == "<think>" else {"end_to_think": True}
                 yield {"answer": "", "reference": {}, "audio_binary": None, "prompt": "", "created_at": time.time(), "final": False, **flags}
                 continue
             yield {"answer": value, "reference": {}, "audio_binary": tts(tts_mdl, value), "prompt": "", "created_at": time.time(), "final": False}
+        if trace_turn_id:
+            ChatTraceTurnService.finalize_turn(
+                trace_turn_id,
+                full_response=last_state.full_text if last_state else "",
+                response_reference={},
+                prompt_snapshot=prompt_config.get("system", ""),
+                timing_metrics={},
+            )
     else:
         if llm_type == "chat":
             answer = await chat_mdl.async_chat(prompt_config.get("system", ""), msg, dialog.llm_setting)
@@ -246,6 +269,14 @@ async def async_chat_solo(dialog, messages, stream=True):
             answer = await chat_mdl.async_chat(prompt_config.get("system", ""), msg, dialog.llm_setting, images=image_files)
         user_content = msg[-1].get("content", "[content not available]")
         logging.debug("User: {}|Assistant: {}".format(user_content, answer))
+        if trace_turn_id:
+            ChatTraceTurnService.finalize_turn(
+                trace_turn_id,
+                full_response=answer,
+                response_reference={},
+                prompt_snapshot=prompt_config.get("system", ""),
+                timing_metrics={},
+            )
         yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, answer), "prompt": "", "created_at": time.time()}
 
 
@@ -454,8 +485,9 @@ def repair_bad_citation_formats(answer: str, kbinfos: dict, idx: set):
 async def async_chat(dialog, messages, stream=True, **kwargs):
     logging.debug("Begin async_chat")
     assert messages[-1]["role"] == "user", "The last content of this conversation is not from user."
+    trace_turn_id = kwargs.get("chat_trace_turn_id")
     if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key"):
-        async for ans in async_chat_solo(dialog, messages, stream):
+        async for ans in async_chat_solo(dialog, messages, stream, **kwargs):
             yield ans
         return
 
@@ -518,6 +550,23 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
         ans = await use_sql(questions[-1], field_map, dialog.tenant_id, chat_mdl, prompt_config.get("quote", True), dialog.kb_ids)
         # For aggregate queries (COUNT, SUM, etc.), chunks may be empty but answer is still valid
         if ans and (ans.get("reference", {}).get("chunks") or ans.get("answer")):
+            if trace_turn_id:
+                ChatTraceTurnService.update_turn(
+                    trace_turn_id,
+                    refined_questions=deepcopy(questions),
+                    system_prompt_rendered=ans.get("prompt", ""),
+                    retrieval_snapshot=ChatTraceTurnService.sanitize_reference(ans.get("reference", {})),
+                    response_reference=ChatTraceTurnService.sanitize_reference(ans.get("reference", {})),
+                    llm_name=(llm_model_config or {}).get("llm_name", ""),
+                    llm_factory=factory,
+                )
+                ChatTraceTurnService.finalize_turn(
+                    trace_turn_id,
+                    full_response=ans.get("answer", ""),
+                    response_reference=ans.get("reference", {}),
+                    prompt_snapshot=ans.get("prompt", ""),
+                    timing_metrics={"path": "sql"},
+                )
             yield ans
             return
         else:
@@ -640,6 +689,14 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
     retrieval_ts = timer()
     if not knowledges and prompt_config.get("empty_response"):
         empty_res = prompt_config["empty_response"]
+        if trace_turn_id:
+            ChatTraceTurnService.finalize_turn(
+                trace_turn_id,
+                full_response=empty_res,
+                response_reference=kbinfos,
+                prompt_snapshot="\n\n### Query:\n%s" % " ".join(questions),
+                timing_metrics={"path": "empty_response"},
+            )
         yield {"answer": empty_res, "reference": kbinfos, "prompt": "\n\n### Query:\n%s" % " ".join(questions),
                "audio_binary": tts(tts_mdl, empty_res), "final": True}
         return
@@ -657,6 +714,18 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
         convert_last_user_msg_to_multimodal(msg, image_attachments, factory)
     assert len(msg) >= 2, f"message_fit_in has bug: {msg}"
     prompt = msg[0]["content"]
+
+    if trace_turn_id:
+        ChatTraceTurnService.update_turn(
+            trace_turn_id,
+            refined_questions=deepcopy(questions),
+            model_input_messages=deepcopy(msg),
+            system_prompt_rendered=prompt,
+            knowledge_text=kwargs.get("knowledge", ""),
+            retrieval_snapshot=ChatTraceTurnService.sanitize_reference(kbinfos),
+            llm_name=(llm_model_config or {}).get("llm_name", ""),
+            llm_factory=factory,
+        )
 
     if "max_tokens" in gen_conf:
         gen_conf["max_tokens"] = min(gen_conf["max_tokens"], max_tokens - used_token_count)
@@ -730,6 +799,16 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
             f"  - Generated tokens(approximately): {tk_num}\n"
             f"  - Token speed: {int(tk_num / (generate_result_time_cost / 1000.0))}/s"
         )
+        timing_metrics = {
+            "total_ms": round(total_time_cost, 1),
+            "check_llm_ms": round(check_llm_time_cost, 1),
+            "check_langfuse_ms": round(check_langfuse_tracer_cost, 1),
+            "bind_models_ms": round(bind_embedding_time_cost, 1),
+            "refine_question_ms": round(refine_question_time_cost, 1),
+            "retrieval_ms": round(retrieval_time_cost, 1),
+            "generate_answer_ms": round(generate_result_time_cost, 1),
+            "generated_tokens_estimate": tk_num,
+        }
 
         # Add a condition check to call the end method only if langfuse_tracer exists
         if langfuse_tracer and "langfuse_generation" in locals():
@@ -737,8 +816,18 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
             langfuse_output = {"time_elapsed:": re.sub(r"\n", "  \n", langfuse_output), "created_at": time.time()}
             langfuse_generation.update(output=langfuse_output)
             langfuse_generation.end()
+        final_prompt = re.sub(r"\n", "  \n", prompt)
+        full_response = think + answer
+        if trace_turn_id:
+            ChatTraceTurnService.finalize_turn(
+                trace_turn_id,
+                full_response=full_response,
+                response_reference=refs,
+                prompt_snapshot=final_prompt,
+                timing_metrics=timing_metrics,
+            )
 
-        return {"answer": think + answer, "reference": refs, "prompt": re.sub(r"\n", "  \n", prompt), "created_at": time.time()}
+        return {"answer": full_response, "reference": refs, "prompt": final_prompt, "created_at": time.time()}
 
     if langfuse_tracer:
         langfuse_generation = langfuse_tracer.start_generation(

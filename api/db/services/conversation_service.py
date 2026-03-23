@@ -15,9 +15,11 @@
 #
 import time
 from uuid import uuid4
+from copy import deepcopy
 from common.constants import StatusEnum
 from api.db.db_models import Conversation, DB
 from api.db.services.api_service import API4ConversationService
+from api.db.services.chat_trace_service import ChatTraceTurnService
 from api.db.services.common_service import CommonService
 from api.db.services.dialog_service import DialogService, async_chat
 from common.misc_utils import get_uuid
@@ -248,10 +250,30 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
     if not msg[-1].get("id"):
         msg[-1]["id"] = get_uuid()
     message_id = msg[-1]["id"]
+    turn_no = (conv.round or 0) + 1
 
     if not conv.reference:
         conv.reference = []
     conv.reference.append({"chunks": [], "doc_aggs": []})
+
+    trace_turn = ChatTraceTurnService.create_pending_turn(
+        tenant_id=dia.tenant_id,
+        dialog_id=dialog_id,
+        session_id=session_id,
+        source="chatbot",
+        turn_no=turn_no,
+        user_message_id=message_id,
+        assistant_message_id=message_id,
+        request_question=question["content"],
+        request_payload={
+            **deepcopy(kwargs),
+            "question": question["content"],
+            "stream": stream,
+            "session_id": session_id,
+        },
+        history_snapshot=deepcopy(msg),
+    )
+    kwargs["chat_trace_turn_id"] = trace_turn.id
 
     if stream:
         try:
@@ -261,6 +283,7 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
                                            ensure_ascii=False) + "\n\n"
             API4ConversationService.append_message(conv.id, conv.to_dict())
         except Exception as e:
+            ChatTraceTurnService.mark_error(trace_turn.id, e)
             yield "data:" + json.dumps({"code": 500, "message": str(e),
                                         "data": {"answer": "**ERROR**: " + str(e), "reference": []}},
                                        ensure_ascii=False) + "\n\n"
@@ -268,8 +291,12 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
 
     else:
         answer = None
-        async for ans in async_chat(dia, msg, False, **kwargs):
-            answer = structure_answer(conv, ans, message_id, session_id)
-            API4ConversationService.append_message(conv.id, conv.to_dict())
-            break
+        try:
+            async for ans in async_chat(dia, msg, False, **kwargs):
+                answer = structure_answer(conv, ans, message_id, session_id)
+                API4ConversationService.append_message(conv.id, conv.to_dict())
+                break
+        except Exception as e:
+            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            raise
         yield answer
