@@ -1401,30 +1401,46 @@ def alter_db_rename_column(migrator, table_name, old_column_name, new_column_nam
 
 def migrate_add_unique_email(migrator):
     """Deduplicates user emails and add UNIQUE constraint to email column (idempotent)"""
-    # step 0: check if UNIQUE index on email already exists
-    try:
+    def get_email_index_state():
         if settings.DATABASE_TYPE.upper() == "POSTGRES":
             cursor = DB.execute_sql("""
-                SELECT COUNT(*)
-                FROM pg_indexes
-                WHERE tablename = 'user'
-                  AND indexname = 'user_email'
+                SELECT ix.indisunique
+                FROM pg_class t
+                JOIN pg_index ix ON t.oid = ix.indrelid
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                WHERE t.relname = 'user'
+                  AND i.relname = 'user_email'
+                LIMIT 1
             """)
-        else:
-            cursor = DB.execute_sql("""
-                SELECT COUNT(*)
-                FROM information_schema.statistics
-                WHERE table_schema = DATABASE()
-                  AND table_name = 'user'
-                  AND index_name = 'user_email'
-                  AND non_unique = 0
-            """)
+            result = cursor.fetchone()
+            if not result:
+                return "missing"
+            return "unique" if result[0] else "non_unique"
+
+        cursor = DB.execute_sql("""
+            SELECT non_unique
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'user'
+              AND index_name = 'user_email'
+            LIMIT 1
+        """)
         result = cursor.fetchone()
-        if result and result[0] > 0:
+        if not result:
+            return "missing"
+        return "non_unique" if result[0] else "unique"
+
+    index_state = None
+    # step 0: inspect current email index state
+    try:
+        index_state = get_email_index_state()
+        if index_state == "unique":
             logging.info("UNIQUE index on user.email already exists, skipping migration")
             return
+        if index_state == "non_unique":
+            logging.warning("Found non-unique index user_email on user.email, will replace it with a UNIQUE index")
     except Exception as ex:
-        logging.warning("Failed to check if UNIQUE index exists on user.email: %s, continuing with migration", ex)
+        logging.warning("Failed to inspect index state on user.email: %s, continuing with migration", ex)
 
     # step 1: rename duplicate rows so the UNIQUE constraint can be applied
     try:
@@ -1446,14 +1462,33 @@ def migrate_add_unique_email(migrator):
         logging.critical("Failed to deduplicate user.email before adding UNIQUE constraint: %s", ex)
         return
 
-    # step 2: add UNIQUE index via migrator
+    # step 2: drop a conflicting same-name non-unique index before creating the UNIQUE one
+    if index_state == "non_unique":
+        try:
+            if settings.DATABASE_TYPE.upper() == "POSTGRES":
+                DB.execute_sql('DROP INDEX IF EXISTS "user_email"')
+            else:
+                DB.execute_sql("ALTER TABLE `user` DROP INDEX `user_email`")
+        except Exception as ex:
+            logging.critical("Failed to drop non-unique index user_email before adding UNIQUE constraint: %s", ex)
+            return
+
+    # step 3: add UNIQUE index via migrator
     try:
         migrate(migrator.add_index("user", ("email",), unique=True))
     except (OperationalError, ProgrammingError) as ex:
         msg = str(ex)
-        # MySQL 1061 "Duplicate key name" or PostgreSQL "already exists" -> already migrated
+        try:
+            index_state = get_email_index_state()
+        except Exception:
+            index_state = None
+
+        if index_state == "unique":
+            logging.info("UNIQUE index on user.email already exists after migration attempt, skipping")
+            return
+
         if "1061" in msg or "Duplicate key name" in msg or "already exists" in msg.lower():
-            pass
+            logging.critical("Failed to add UNIQUE constraint on user.email because a conflicting non-unique index still exists: %s", ex)
         else:
             logging.critical("Failed to add UNIQUE constraint on user.email: %s", ex)
     except Exception as ex:
