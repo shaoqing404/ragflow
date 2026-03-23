@@ -183,7 +183,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
     conv.message.append({"role": "assistant", "content": "", "id": message_id})
     conv.reference.append({"chunks": [], "doc_aggs": []})
 
-    trace_turn = ChatTraceTurnService.create_pending_turn(
+    trace_turn_id = ChatTraceTurnService.create_pending_turn(
         tenant_id=tenant_id,
         dialog_id=chat_id,
         session_id=session_id,
@@ -201,7 +201,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
         },
         history_snapshot=deepcopy(msg),
     )
-    kwargs["chat_trace_turn_id"] = trace_turn.id
+    kwargs["chat_trace_turn_id"] = trace_turn_id
 
     if stream:
         try:
@@ -210,7 +210,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
                 yield "data:" + json.dumps({"code": 0, "data": ans}, ensure_ascii=False) + "\n\n"
             ConversationService.update_by_id(conv.id, conv.to_dict())
         except Exception as e:
-            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            ChatTraceTurnService.mark_error(trace_turn_id, e)
             yield "data:" + json.dumps({"code": 500, "message": str(e),
                                         "data": {"answer": "**ERROR**: " + str(e), "reference": []}},
                                        ensure_ascii=False) + "\n\n"
@@ -224,7 +224,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
                 ConversationService.update_by_id(conv.id, conv.to_dict())
                 break
         except Exception as e:
-            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            ChatTraceTurnService.mark_error(trace_turn_id, e)
             raise
         yield answer
 
@@ -282,7 +282,7 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
         conv.reference = []
     conv.reference.append({"chunks": [], "doc_aggs": []})
 
-    trace_turn = ChatTraceTurnService.create_pending_turn(
+    trace_turn_id = ChatTraceTurnService.create_pending_turn(
         tenant_id=dia.tenant_id,
         dialog_id=dialog_id,
         session_id=session_id,
@@ -299,7 +299,7 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
         },
         history_snapshot=deepcopy(msg),
     )
-    kwargs["chat_trace_turn_id"] = trace_turn.id
+    kwargs["chat_trace_turn_id"] = trace_turn_id
 
     if stream:
         try:
@@ -309,7 +309,7 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
                                            ensure_ascii=False) + "\n\n"
             API4ConversationService.append_message(conv.id, conv.to_dict())
         except Exception as e:
-            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            ChatTraceTurnService.mark_error(trace_turn_id, e)
             yield "data:" + json.dumps({"code": 500, "message": str(e),
                                         "data": {"answer": "**ERROR**: " + str(e), "reference": []}},
                                        ensure_ascii=False) + "\n\n"
@@ -323,6 +323,6 @@ async def async_iframe_completion(dialog_id, question, session_id=None, stream=T
                 API4ConversationService.append_message(conv.id, conv.to_dict())
                 break
         except Exception as e:
-            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            ChatTraceTurnService.mark_error(trace_turn_id, e)
             raise
         yield answer

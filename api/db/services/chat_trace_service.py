@@ -18,6 +18,7 @@ import re
 
 from api.db.db_models import ChatTraceTurn
 from api.db.services.common_service import CommonService
+from common.misc_utils import get_uuid
 
 
 class ChatTraceTurnService(CommonService):
@@ -56,7 +57,9 @@ class ChatTraceTurnService(CommonService):
         request_payload,
         history_snapshot,
     ):
-        return cls.insert(
+        trace_turn_id = get_uuid()
+        cls.insert(
+            id=trace_turn_id,
             tenant_id=tenant_id,
             dialog_id=dialog_id,
             session_id=session_id,
@@ -69,6 +72,7 @@ class ChatTraceTurnService(CommonService):
             history_snapshot=history_snapshot,
             status="running",
         )
+        return trace_turn_id
 
     @classmethod
     def update_turn(cls, trace_turn_id, **fields):

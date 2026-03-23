@@ -265,7 +265,7 @@ async def completion(tenant_id, agent_id, session_id=None, **kwargs):
         "id": message_id,
         "files": files
     })
-    trace_turn = ChatTraceTurnService.create_pending_turn(
+    trace_turn_id = ChatTraceTurnService.create_pending_turn(
         tenant_id=tenant_id,
         dialog_id=agent_id,
         session_id=session_id,
@@ -286,7 +286,7 @@ async def completion(tenant_id, agent_id, session_id=None, **kwargs):
         history_snapshot=json.loads(json.dumps(conv.message, ensure_ascii=False)),
     )
     ChatTraceTurnService.update_turn(
-        trace_turn.id,
+        trace_turn_id,
         model_input_messages=json.loads(json.dumps(conv.message, ensure_ascii=False)),
     )
     txt = ""
@@ -308,16 +308,16 @@ async def completion(tenant_id, agent_id, session_id=None, **kwargs):
         conv = conv.to_dict()
         API4ConversationService.append_message(conv["id"], conv)
         ChatTraceTurnService.finalize_turn(
-            trace_turn.id,
+            trace_turn_id,
             full_response=txt,
             response_reference=canvas.get_reference(),
             prompt_snapshot="",
             timing_metrics={},
         )
         if canvas.error:
-            ChatTraceTurnService.update_turn(trace_turn.id, error_message=canvas.error)
+            ChatTraceTurnService.update_turn(trace_turn_id, error_message=canvas.error)
     except Exception as e:
-        ChatTraceTurnService.mark_error(trace_turn.id, e)
+        ChatTraceTurnService.mark_error(trace_turn_id, e)
         raise
 
 
