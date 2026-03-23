@@ -173,6 +173,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
             continue
         msg.append(m)
     message_id = msg[-1].get("id")
+    turn_no = len([m for m in msg if m.get("role") == "user"])
     e, dia = DialogService.get_by_id(conv.dialog_id)
 
     kb_ids = kwargs.get("kb_ids",[])
@@ -182,6 +183,26 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
     conv.message.append({"role": "assistant", "content": "", "id": message_id})
     conv.reference.append({"chunks": [], "doc_aggs": []})
 
+    trace_turn = ChatTraceTurnService.create_pending_turn(
+        tenant_id=tenant_id,
+        dialog_id=chat_id,
+        session_id=session_id,
+        source="chat",
+        turn_no=turn_no,
+        user_message_id=message_id,
+        assistant_message_id=message_id,
+        request_question=question["content"],
+        request_payload={
+            **deepcopy(kwargs),
+            "question": question["content"],
+            "stream": stream,
+            "session_id": session_id,
+            "name": name,
+        },
+        history_snapshot=deepcopy(msg),
+    )
+    kwargs["chat_trace_turn_id"] = trace_turn.id
+
     if stream:
         try:
             async for ans in async_chat(dia, msg, True, **kwargs):
@@ -189,6 +210,7 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
                 yield "data:" + json.dumps({"code": 0, "data": ans}, ensure_ascii=False) + "\n\n"
             ConversationService.update_by_id(conv.id, conv.to_dict())
         except Exception as e:
+            ChatTraceTurnService.mark_error(trace_turn.id, e)
             yield "data:" + json.dumps({"code": 500, "message": str(e),
                                         "data": {"answer": "**ERROR**: " + str(e), "reference": []}},
                                        ensure_ascii=False) + "\n\n"
@@ -196,10 +218,14 @@ async def async_completion(tenant_id, chat_id, question, name="New session", ses
 
     else:
         answer = None
-        async for ans in async_chat(dia, msg, False, **kwargs):
-            answer = structure_answer(conv, ans, message_id, session_id)
-            ConversationService.update_by_id(conv.id, conv.to_dict())
-            break
+        try:
+            async for ans in async_chat(dia, msg, False, **kwargs):
+                answer = structure_answer(conv, ans, message_id, session_id)
+                ConversationService.update_by_id(conv.id, conv.to_dict())
+                break
+        except Exception as e:
+            ChatTraceTurnService.mark_error(trace_turn.id, e)
+            raise
         yield answer
 
 async def async_iframe_completion(dialog_id, question, session_id=None, stream=True, **kwargs):

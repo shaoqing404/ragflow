@@ -551,6 +551,7 @@ async def agents_completion_openai_compatibility(tenant_id, agent_id):
 async def agent_completions(tenant_id, agent_id):
     req = await get_request_json()
     return_trace = bool(req.get("return_trace", False))
+    req["trace_source"] = "agent"
 
     if req.get("stream", True):
 
@@ -1009,6 +1010,7 @@ async def agent_bot_completions(agent_id):
     objs = APIToken.query(beta=token)
     if not objs:
         return get_error_data_result(message='Authentication error: API key is invalid!"')
+    req["trace_source"] = "agentbot"
 
     if req.get("stream", True):
         async def stream():

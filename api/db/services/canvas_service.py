@@ -21,6 +21,7 @@ from agent.canvas import Canvas
 from api.db import CanvasCategory, TenantPermission
 from api.db.db_models import DB, CanvasTemplate, User, UserCanvas, API4Conversation, UserCanvasVersion
 from api.db.services.api_service import API4ConversationService
+from api.db.services.chat_trace_service import ChatTraceTurnService
 from api.db.services.common_service import CommonService
 from api.db.services.user_canvas_version import UserCanvasVersionService
 from common.misc_utils import get_uuid
@@ -234,6 +235,7 @@ async def completion(tenant_id, agent_id, session_id=None, **kwargs):
     user_id = kwargs.get("user_id", "")
     custom_header = kwargs.get("custom_header", "")
     release_mode = str(kwargs.get("release", "")).strip().lower()
+    trace_source = kwargs.get("trace_source", "agent")
 
     if session_id:
         e, conv = API4ConversationService.get_by_id(session_id)
@@ -263,23 +265,60 @@ async def completion(tenant_id, agent_id, session_id=None, **kwargs):
         "id": message_id,
         "files": files
     })
+    trace_turn = ChatTraceTurnService.create_pending_turn(
+        tenant_id=tenant_id,
+        dialog_id=agent_id,
+        session_id=session_id,
+        source=trace_source,
+        turn_no=(conv.round or 0) + 1,
+        user_message_id=message_id,
+        assistant_message_id=message_id,
+        request_question=query,
+        request_payload={
+            "query": query,
+            "question": kwargs.get("question", ""),
+            "inputs": inputs,
+            "files": files,
+            "release": kwargs.get("release", ""),
+            "stream": kwargs.get("stream", True),
+            "session_id": session_id,
+        },
+        history_snapshot=json.loads(json.dumps(conv.message, ensure_ascii=False)),
+    )
+    ChatTraceTurnService.update_turn(
+        trace_turn.id,
+        model_input_messages=json.loads(json.dumps(conv.message, ensure_ascii=False)),
+    )
     txt = ""
-    async for ans in canvas.run(query=query, files=files, user_id=user_id, inputs=inputs):
-        ans["session_id"] = session_id
-        if ans["event"] == "message":
-            txt += ans["data"]["content"]
-            if ans["data"].get("start_to_think", False):
-                txt += "<think>"
-            elif ans["data"].get("end_to_think", False):
-                txt += "</think>"
-        yield "data:" + json.dumps(ans, ensure_ascii=False) + "\n\n"
+    try:
+        async for ans in canvas.run(query=query, files=files, user_id=user_id, inputs=inputs):
+            ans["session_id"] = session_id
+            if ans["event"] == "message":
+                txt += ans["data"]["content"]
+                if ans["data"].get("start_to_think", False):
+                    txt += "<think>"
+                elif ans["data"].get("end_to_think", False):
+                    txt += "</think>"
+            yield "data:" + json.dumps(ans, ensure_ascii=False) + "\n\n"
 
-    conv.message.append({"role": "assistant", "content": txt, "created_at": time.time(), "id": message_id})
-    conv.reference = canvas.get_reference()
-    conv.errors = canvas.error
-    conv.dsl = str(canvas)
-    conv = conv.to_dict()
-    API4ConversationService.append_message(conv["id"], conv)
+        conv.message.append({"role": "assistant", "content": txt, "created_at": time.time(), "id": message_id})
+        conv.reference = canvas.get_reference()
+        conv.errors = canvas.error
+        conv.dsl = str(canvas)
+        conv = conv.to_dict()
+        API4ConversationService.append_message(conv["id"], conv)
+        ChatTraceTurnService.finalize_turn(
+            trace_turn.id,
+            full_response=txt,
+            response_reference=canvas.get_reference(),
+            prompt_snapshot="",
+            timing_metrics={},
+        )
+        if canvas.error:
+            ChatTraceTurnService.update_turn(trace_turn.id, error_message=canvas.error)
+    except Exception as e:
+        ChatTraceTurnService.mark_error(trace_turn.id, e)
+        raise
 
 
 async def completion_openai(tenant_id, agent_id, question, session_id=None, stream=True, **kwargs):
