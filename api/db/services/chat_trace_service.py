@@ -123,3 +123,116 @@ class ChatTraceTurnService(CommonService):
             "think": trace_turn.think_content or "",
             "answer": trace_turn.answer_content or "",
         }
+
+    @staticmethod
+    def _copy_messages(trace_turn: ChatTraceTurn):
+        messages = deepcopy(trace_turn.model_input_messages or [])
+        if messages:
+            return messages
+
+        fallback = []
+        if trace_turn.system_prompt_rendered:
+            fallback.append({"role": "system", "content": trace_turn.system_prompt_rendered})
+        if trace_turn.request_question:
+            fallback.append({"role": "user", "content": trace_turn.request_question})
+        return fallback
+
+    @staticmethod
+    def _base_metadata(trace_turn: ChatTraceTurn):
+        return {
+            "source": trace_turn.source,
+            "llm_name": trace_turn.llm_name,
+            "llm_factory": trace_turn.llm_factory,
+            "dialog_id": trace_turn.dialog_id,
+            "session_id": trace_turn.session_id,
+            "turn_no": trace_turn.turn_no,
+            "history_snapshot": deepcopy(trace_turn.history_snapshot or []),
+            "retrieval_snapshot": deepcopy(trace_turn.retrieval_snapshot or {}),
+            "response_reference": deepcopy(trace_turn.response_reference or {}),
+            "knowledge": trace_turn.knowledge_text or "",
+            "status": trace_turn.status,
+        }
+
+    @classmethod
+    def to_sft_answer_record(cls, trace_turn: ChatTraceTurn):
+        return {
+            "id": trace_turn.id,
+            "session_id": trace_turn.session_id,
+            "turn_no": trace_turn.turn_no,
+            "dialog_id": trace_turn.dialog_id,
+            "messages": cls._copy_messages(trace_turn),
+            "assistant": trace_turn.answer_content or "",
+            "metadata": {
+                **cls._base_metadata(trace_turn),
+                "has_think": bool(trace_turn.think_content),
+            },
+        }
+
+    @classmethod
+    def to_sft_cot_record(cls, trace_turn: ChatTraceTurn):
+        assistant = trace_turn.full_response or trace_turn.answer_content or ""
+        return {
+            "id": trace_turn.id,
+            "session_id": trace_turn.session_id,
+            "turn_no": trace_turn.turn_no,
+            "dialog_id": trace_turn.dialog_id,
+            "messages": cls._copy_messages(trace_turn),
+            "assistant": assistant,
+            "metadata": cls._base_metadata(trace_turn),
+        }
+
+    @classmethod
+    def to_rl_prompt_bank_record(cls, trace_turn: ChatTraceTurn):
+        return {
+            "id": trace_turn.id,
+            "prompt": cls._copy_messages(trace_turn),
+            "reference_answer": trace_turn.answer_content or "",
+            "reference_think": trace_turn.think_content or "",
+            "metadata": cls._base_metadata(trace_turn),
+        }
+
+    @classmethod
+    def to_dpo_seed_record(cls, trace_turn: ChatTraceTurn):
+        return {
+            "id": trace_turn.id,
+            "prompt": cls._copy_messages(trace_turn),
+            "chosen": trace_turn.answer_content or "",
+            "chosen_cot": trace_turn.full_response or trace_turn.answer_content or "",
+            "rejected": None,
+            "metadata": {
+                **cls._base_metadata(trace_turn),
+                "seed_type": "teacher_anchor",
+                "reject_source": None,
+            },
+        }
+
+    @classmethod
+    def to_grpo_seed_record(cls, trace_turn: ChatTraceTurn):
+        return {
+            "group_id": trace_turn.id,
+            "prompt": cls._copy_messages(trace_turn),
+            "teacher": {
+                "answer": trace_turn.answer_content or "",
+                "think": trace_turn.think_content or "",
+                "full_response": trace_turn.full_response or trace_turn.answer_content or "",
+            },
+            "candidates": [],
+            "metadata": {
+                **cls._base_metadata(trace_turn),
+                "seed_type": "teacher_anchor",
+            },
+        }
+
+    @classmethod
+    def to_export_record(cls, trace_turn: ChatTraceTurn, export_format: str):
+        converters = {
+            "training_record": cls.to_training_record,
+            "sft_answer": cls.to_sft_answer_record,
+            "sft_cot": cls.to_sft_cot_record,
+            "rl_prompt_bank": cls.to_rl_prompt_bank_record,
+            "dpo_seed": cls.to_dpo_seed_record,
+            "grpo_seed": cls.to_grpo_seed_record,
+        }
+        if export_format not in converters:
+            raise ValueError(f"Unsupported export format: {export_format}")
+        return converters[export_format](trace_turn)
