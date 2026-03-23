@@ -50,8 +50,6 @@ user_default_llm:
   parsers: "naive:General,qa:Q&A,resume:Resume,manual:Manual,table:Table,paper:Paper,book:Book,laws:Laws,presentation:Presentation,picture:Picture,one:One,audio:Audio,email:Email,tag:Tag,mel:CA_MEL,3u_mel:3U_MEL"
   default_models:
     embedding_model:
-      name: 'bge-m3'
-      factory: 'xxxx'
       api_key: 'xxx'
       base_url: 'http://localhost:6380'
 # postgres:
