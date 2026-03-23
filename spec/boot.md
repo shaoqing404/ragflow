@@ -1,4 +1,4 @@
-# BOOT: RAGFlow + three_u_0231
+# BOOT: RAGFlow + three_u_0240
 
 本文件用于“先读这一页再看其他文档/代码”。
 请注意：本仓库不是官方原版，而是官方 fork 的**中间改造分支**，用于 3U 魔改后发布到 Gitee 的部署链路。
@@ -12,7 +12,7 @@ RAGFlow 是一个开源 RAG（检索增强生成）引擎，包含：
 ## 本分支的定位（非常重要）
 - **官方上游**：`github.com/infiniflow/ragflow`
 - **GitHub fork**：`github.com/shaoqing404/ragflow`（自动跟随官方）
-- **本地开发分支**：`three_u_0231`
+- **本地开发分支**：`three_u_0240`
   - 承载 3U 相关的定制与魔改
   - 以“合并上游更新 + 保留 3U 改动”为目标
 - **部署目标**：`gitee.com/GFCM/ragflow`
@@ -44,6 +44,7 @@ RAGFlow 是一个开源 RAG（检索增强生成）引擎，包含：
 | `page_index_bug_report.md` | 遇到 DeepDoc 页码越界错误时 |
 | `task_deepdoc_bounds_fix.md` | 跟踪 DeepDoc 边界修复进展时 |
 | `task_mineru_integration_comparison.md` | 对比 MinerU 跨版本接入机制时 |
+| `training_trace_capture.md` | 需要查看训练/蒸馏数据采集与导出方案时 |
 
 ### 参考
 - **`spec/branch_sync_logs/`** — 历史合并日志（按日期归档）
@@ -82,13 +83,13 @@ RAGFlow 是一个开源 RAG（检索增强生成）引擎，包含：
 以下是本项目中反复出现的操作模式，AI 或维护者可直接按名称调用：
 
 ### skill: sync-upstream
-**目的**：从 origin/main 合并官方更新到 three_u_0231
+**目的**：从 origin/main 合并官方更新到 three_u_0240
 **前置**：阅读 `spec/branch_sync_playbook.md`
 **步骤摘要**：
 1. `git status -sb` 确认工作区干净
 2. `git fetch origin` → `git merge origin/main`
 3. 冲突解决（优先保留 3U 逻辑）
-4. `git push gitee three_u_0231`
+4. `git push gitee three_u_0240`
 **注意**：绝不 push 到 origin；force-push 需人工批准
 
 ### skill: diagnose-3u-mel

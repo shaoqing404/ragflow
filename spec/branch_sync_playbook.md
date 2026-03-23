@@ -1,6 +1,6 @@
-# Branch Sync Playbook (three_u_0231)
+# Branch Sync Playbook (three_u_0240)
 
-This file documents the recommended sync workflow for the `three_u_0231` branch
+This file documents the recommended sync workflow for the `three_u_0240` branch
 and how Project Management AI should handle conflicts and pushes to Gitee.
 
 ## Architecture Overview
@@ -21,7 +21,7 @@ and how Project Management AI should handle conflicts and pushes to Gitee.
                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Local Workstation                            │
-│            Branch: three_u_0231                                 │
+│            Branch: three_u_0240                                 │
 │            Purpose: Development & customization workspace       │
 └─────────────────────┬───────────────────────────────────────────┘
                       │ git push gitee three_u_0231
@@ -34,8 +34,8 @@ and how Project Management AI should handle conflicts and pushes to Gitee.
 ```
 
 ## Goals
-- Keep `three_u_0231` tracking origin (GitHub fork that syncs official) changes.
-- Preserve local customizations (3U MEL parsers, etc.) in `three_u_0231`.
+- Keep `three_u_0240` tracking origin (GitHub fork that syncs official) changes.
+- Preserve local customizations (3U MEL parsers, etc.) in `three_u_0240`.
 - Push updates **ONLY to gitee**, which handles server deployment.
 
 ## Git Remote Configuration
@@ -53,7 +53,7 @@ Use merge to keep history clear and reduce rebase risks.
 
 ```bash
 # 1) Ensure clean working tree
-git checkout three_u_0231
+git checkout three_u_0240
 git status -sb
 
 # 2) If local changes exist, either commit or stash
@@ -73,7 +73,7 @@ git add <conflict-files>
 git commit
 
 # 5) Push to Gitee ONLY (not origin!)
-git push gitee three_u_0231
+git push gitee three_u_0240
 ```
 
 ## Conflict Resolution Checklist
@@ -90,7 +90,7 @@ git push gitee three_u_0231
 Only use rebase if you need a clean linear history and understand the risks.
 
 ```bash
-git checkout three_u_0231
+git checkout three_u_0240
 git fetch origin
 git rebase origin/main
 
@@ -99,22 +99,22 @@ git add <conflict-files>
 git rebase --continue
 
 # push updated history to Gitee ONLY
-git push gitee three_u_0231 --force-with-lease
+git push gitee three_u_0240 --force-with-lease
 ```
 
 ## Force-Sync to Gitee master (destructive)
 Only run when approved. This overwrites `gitee/master` to match
-`three_u_0231`.
+`three_u_0240`.
 
 ```bash
-git push gitee three_u_0231:master --force
+git push gitee three_u_0240:master --force
 ```
 
 ## Project Management AI Handoff (role notes)
-- Primary branch: `three_u_0231`
+- Primary branch: `three_u_0240`
 - Official source: `origin/main` (GitHub fork that auto-syncs with infiniflow/ragflow)
-- Push target: `gitee/three_u_0231` **ONLY** (never push to origin)
-- When instructed, force-sync `gitee/master` from `three_u_0231`
+- Push target: `gitee/three_u_0240` **ONLY** (never push to origin)
+- When instructed, force-sync `gitee/master` from `three_u_0240`
 - If conflicts arise:
   - Prefer keeping 3U logic and recent local changes.
   - If unclear, request human confirmation before finalizing.
