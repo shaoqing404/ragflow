@@ -49,7 +49,35 @@ RAGFlow 是一个开源 RAG（检索增强生成）引擎，包含：
 - **`spec/branch_sync_logs/`** — 历史合并日志（按日期归档）
 - **`spec/tmp/`** — Agent 提示词模版草稿，与主流程无关，无需主动阅读
 
-## Skills（围绕本项目的常用任务）
+## 配置文件处理策略（重要）
+
+以下两个文件包含服务器密码、API Key 等敏感信息，**本地不要修改原文件，也不要提交到仓库**：
+
+- `docker/.env`
+- `conf/service_conf.yaml`
+
+### 本地 AI 的职责
+当上游合并导致这两个文件有变化时：
+1. 用 `git diff HEAD~1 -- docker/.env conf/service_conf.yaml` 查看变化量
+2. 将变化摘要写入对应的 `.temp` 文件：
+   - `docker/.env.upstream-changes.temp`
+   - `conf/service_conf.yaml.upstream-changes.temp`
+3. `.temp` 文件记录：变更日期、新增/删除/修改的变量名、上游默认值（脱敏）
+4. **不要修改原配置文件的实际值，不要将配置文件推送到仓库**
+
+### 远程项目管理 AI 的职责
+读取 `.temp` 文件，在服务器上完成实际的配置合并与密码填充。
+
+### .temp 文件格式示例
+```
+# docker/.env upstream changes - 2026-03-12
+# From merge: origin/main (e78938c72)
+
+[NEW] SVR_ADMIN_PORT=9383
+[NEW] RAGFLOW_CRYPTO_KEY=<needs-server-value>
+[CHANGED] ES_PORT: 1200 -> 9200
+[REMOVED] OLD_UNUSED_VAR
+```
 
 以下是本项目中反复出现的操作模式，AI 或维护者可直接按名称调用：
 

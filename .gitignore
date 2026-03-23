@@ -62,6 +62,15 @@ docker/seekdb
 # server-specific configs
 spec/server/
 
+# 3U local-only directories
+spec/tmp/
+.claude/
+.codex/
+.codex_tmp/
+
+# Config change temp files (for remote project management AI)
+*.upstream-changes.temp
+
 
 #--------------------------------------------------#
 # The following was generated with gitignore.nvim: #
