@@ -28,6 +28,7 @@ type Router struct {
 	userHandler          *handler.UserHandler
 	tenantHandler        *handler.TenantHandler
 	documentHandler      *handler.DocumentHandler
+	datasetsHandler      *handler.DatasetsHandler
 	systemHandler        *handler.SystemHandler
 	knowledgebaseHandler *handler.KnowledgebaseHandler
 	chunkHandler         *handler.ChunkHandler
@@ -45,6 +46,7 @@ func NewRouter(
 	userHandler *handler.UserHandler,
 	tenantHandler *handler.TenantHandler,
 	documentHandler *handler.DocumentHandler,
+	datasetsHandler *handler.DatasetsHandler,
 	systemHandler *handler.SystemHandler,
 	knowledgebaseHandler *handler.KnowledgebaseHandler,
 	chunkHandler *handler.ChunkHandler,
@@ -60,6 +62,7 @@ func NewRouter(
 		userHandler:          userHandler,
 		tenantHandler:        tenantHandler,
 		documentHandler:      documentHandler,
+		datasetsHandler:      datasetsHandler,
 		systemHandler:        systemHandler,
 		knowledgebaseHandler: knowledgebaseHandler,
 		chunkHandler:         chunkHandler,
@@ -93,12 +96,13 @@ func (r *Router) Setup(engine *gin.Engine) {
 	// User login by email endpoint
 	engine.POST("/v1/user/login", r.userHandler.LoginByEmail)
 
+	// User logout endpoint
+	engine.GET("/v1/user/logout", r.userHandler.Logout)
+
 	// Protected routes
 	authorized := engine.Group("")
 	authorized.Use(r.authHandler.AuthMiddleware())
 	{
-		// User logout endpoint
-		authorized.GET("/v1/user/logout", r.userHandler.Logout)
 		// User info endpoint
 		authorized.GET("/v1/user/info", r.userHandler.Info)
 		// User tenant info endpoint
@@ -116,13 +120,13 @@ func (r *Router) Setup(engine *gin.Engine) {
 		v1 := authorized.Group("/api/v1")
 		{
 			// User routes
-			users := v1.Group("/users")
-			{
-				users.POST("/register", r.userHandler.Register)
-				users.POST("/login", r.userHandler.Login)
-				users.GET("", r.userHandler.ListUsers)
-				users.GET("/:id", r.userHandler.GetUserByID)
-			}
+			//users := v1.Group("/users")
+			//{
+			//	users.POST("/register", r.userHandler.Register)
+			//	users.POST("/login", r.userHandler.Login)
+			//	users.GET("", r.userHandler.ListUsers)
+			//	users.GET("/:id", r.userHandler.GetUserByID)
+			//}
 
 			// Document routes
 			documents := v1.Group("/documents")
@@ -132,6 +136,14 @@ func (r *Router) Setup(engine *gin.Engine) {
 				documents.GET("/:id", r.documentHandler.GetDocumentByID)
 				documents.PUT("/:id", r.documentHandler.UpdateDocument)
 				documents.DELETE("/:id", r.documentHandler.DeleteDocument)
+			}
+
+			// RESTful dataset routes
+			datasets := v1.Group("/datasets")
+			{
+				datasets.GET("", r.datasetsHandler.ListDatasets)
+				datasets.POST("", r.datasetsHandler.CreateDataset)
+				datasets.DELETE("", r.datasetsHandler.DeleteDatasets)
 			}
 
 			// Author routes
@@ -163,6 +175,13 @@ func (r *Router) Setup(engine *gin.Engine) {
 				kbByID.GET("/knowledge_graph", r.knowledgebaseHandler.KnowledgeGraph)
 				kbByID.DELETE("/knowledge_graph", r.knowledgebaseHandler.DeleteKnowledgeGraph)
 			}
+		}
+
+		// Document routes
+		doc := authorized.Group("/v1/document")
+		{
+			doc.POST("/list", r.documentHandler.ListDocuments)
+			doc.POST("/metadata/summary", r.documentHandler.MetadataSummary)
 		}
 
 		// Chunk routes
