@@ -114,6 +114,7 @@ class ParserType(StrEnum):
 class FileSource(StrEnum):
     LOCAL = ""
     KNOWLEDGEBASE = "knowledgebase"
+    RSS = "rss"
     S3 = "s3"
     NOTION = "notion"
     DISCORD = "discord"
@@ -258,4 +259,9 @@ PADDLEOCR_DEFAULT_CONFIG = {
     "PADDLEOCR_API_URL": "",
     "PADDLEOCR_ACCESS_TOKEN": None,
     "PADDLEOCR_ALGORITHM": "PaddleOCR-VL",
+}
+
+OPENDATALOADER_ENV_KEYS = ["OPENDATALOADER_APISERVER"]
+OPENDATALOADER_DEFAULT_CONFIG = {
+    "OPENDATALOADER_APISERVER": "",
 }

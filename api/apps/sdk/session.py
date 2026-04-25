@@ -14,7 +14,6 @@
 #  limitations under the License.
 #
 import json
-import copy
 import re
 import time
 
@@ -29,7 +28,7 @@ from common.token_utils import num_tokens_from_string
 from agent.canvas import Canvas
 from api.db.db_models import APIToken
 from api.db.services.api_service import API4ConversationService
-from api.db.services.canvas_service import UserCanvasService, completion_openai
+from api.db.services.canvas_service import UserCanvasService
 from api.db.services.canvas_service import completion as agent_completion
 from api.db.services.conversation_service import ConversationService
 from api.db.services.user_canvas_version import UserCanvasVersionService
@@ -45,7 +44,7 @@ from api.db.services.user_service import UserTenantService
 from api.db.joint_services.tenant_model_service import get_tenant_default_model_by_type, get_model_config_by_id, \
     get_model_config_by_type_and_name
 from common.misc_utils import get_uuid
-from api.utils.api_utils import check_duplicate_ids, get_data_openai, get_error_data_result, get_json_result, \
+from api.utils.api_utils import check_duplicate_ids, get_error_data_result, get_json_result, \
     get_result, get_request_json, server_error_response, token_required, validate_request
 from rag.app.tag import label_question
 from rag.prompts.template import load_prompt
@@ -54,36 +53,6 @@ from common.constants import RetCode, LLMType, StatusEnum
 from common import settings
 
 
-@manager.route("/chats/<chat_id>/sessions", methods=["POST"])  # noqa: F821
-@token_required
-async def create(tenant_id, chat_id):
-    req = await get_request_json()
-    req["dialog_id"] = chat_id
-    dia = DialogService.query(tenant_id=tenant_id, id=req["dialog_id"], status=StatusEnum.VALID.value)
-    if not dia:
-        return get_error_data_result(message="You do not own the assistant.")
-    conv = {
-        "id": get_uuid(),
-        "dialog_id": req["dialog_id"],
-        "name": req.get("name", "New session"),
-        "message": [{"role": "assistant", "content": dia[0].prompt_config.get("prologue")}],
-        "user_id": req.get("user_id", ""),
-        "reference": [],
-    }
-    if not conv.get("name"):
-        return get_error_data_result(message="`name` can not be empty.")
-    ConversationService.save(**conv)
-    e, conv = ConversationService.get_by_id(conv["id"])
-    if not e:
-        return get_error_data_result(message="Fail to create a session!")
-    conv = conv.to_dict()
-    conv["messages"] = conv.pop("message")
-    conv["chat_id"] = conv.pop("dialog_id")
-    del conv["reference"]
-    return get_result(data=conv)
-
-
-@manager.route("/agents/<agent_id>/sessions", methods=["POST"])  # noqa: F821
 @token_required
 async def create_agent_session(tenant_id, agent_id):
     req = await get_request_json()
@@ -119,28 +88,6 @@ async def create_agent_session(tenant_id, agent_id):
     API4ConversationService.save(**conv)
     conv["agent_id"] = conv.pop("dialog_id")
     return get_result(data=conv)
-
-
-@manager.route("/chats/<chat_id>/sessions/<session_id>", methods=["PUT"])  # noqa: F821
-@token_required
-async def update(tenant_id, chat_id, session_id):
-    req = await get_request_json()
-    req["dialog_id"] = chat_id
-    conv_id = session_id
-    conv = ConversationService.query(id=conv_id, dialog_id=chat_id)
-    if not conv:
-        return get_error_data_result(message="Session does not exist")
-    if not DialogService.query(id=chat_id, tenant_id=tenant_id, status=StatusEnum.VALID.value):
-        return get_error_data_result(message="You do not own the session")
-    if "message" in req or "messages" in req:
-        return get_error_data_result(message="`message` can not be change")
-    if "reference" in req:
-        return get_error_data_result(message="`reference` can not be change")
-    if "name" in req and not req.get("name"):
-        return get_error_data_result(message="`name` can not be empty.")
-    if not ConversationService.update_by_id(conv_id, req):
-        return get_error_data_result(message="Session updates error")
-    return get_result()
 
 
 @manager.route("/chats/<chat_id>/completions", methods=["POST"])  # noqa: F821

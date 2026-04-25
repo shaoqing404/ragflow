@@ -899,7 +899,7 @@ class Document(DataBaseModel):
     created_by = CharField(max_length=32, null=False, help_text="who created it", index=True)
     name = CharField(max_length=255, null=True, help_text="file name", index=True)
     location = CharField(max_length=255, null=True, help_text="where dose it store", index=True)
-    size = IntegerField(default=0, index=True)
+    size = BigIntegerField(default=0, index=True)
     token_num = IntegerField(default=0, index=True)
     chunk_num = IntegerField(default=0, index=True)
     progress = FloatField(default=0, index=True)
@@ -924,7 +924,7 @@ class File(DataBaseModel):
     created_by = CharField(max_length=32, null=False, help_text="who created it", index=True)
     name = CharField(max_length=255, null=False, help_text="file name or folder name", index=True)
     location = CharField(max_length=255, null=True, help_text="where dose it store", index=True)
-    size = IntegerField(default=0, index=True)
+    size = BigIntegerField(default=0, index=True)
     type = CharField(max_length=32, null=False, help_text="file extension", index=True)
     source_type = CharField(max_length=128, null=False, default="", help_text="where dose this document come from", index=True)
 
@@ -1095,6 +1095,7 @@ class CanvasTemplate(DataBaseModel):
     title = JSONField(null=True, default=dict, help_text="Canvas title")
     description = JSONField(null=True, default=dict, help_text="Canvas description")
     canvas_type = CharField(max_length=32, null=True, help_text="Canvas type", index=True)
+    canvas_types = ListField(null=True, default=list, help_text="Canvas types")
     canvas_category = CharField(max_length=32, null=False, default="agent_canvas", help_text="Canvas category: agent_canvas|dataflow_canvas", index=True)
     dsl = JSONField(null=True, default={})
 
@@ -1401,46 +1402,42 @@ def alter_db_rename_column(migrator, table_name, old_column_name, new_column_nam
 
 def migrate_add_unique_email(migrator):
     """Deduplicates user emails and add UNIQUE constraint to email column (idempotent)"""
-    def get_email_index_state():
+    # step 0: check existing index state on user.email and prepare for unique constraint
+    try:
         if settings.DATABASE_TYPE.upper() == "POSTGRES":
             cursor = DB.execute_sql("""
-                SELECT ix.indisunique
-                FROM pg_class t
-                JOIN pg_index ix ON t.oid = ix.indrelid
-                JOIN pg_class i ON i.oid = ix.indexrelid
-                WHERE t.relname = 'user'
-                  AND i.relname = 'user_email'
-                LIMIT 1
+                SELECT COUNT(*)
+                FROM pg_indexes
+                WHERE tablename = 'user'
+                  AND indexname = 'user_email'
             """)
             result = cursor.fetchone()
-            if not result:
-                return "missing"
-            return "unique" if result[0] else "non_unique"
-
-        cursor = DB.execute_sql("""
-            SELECT non_unique
-            FROM information_schema.statistics
-            WHERE table_schema = DATABASE()
-              AND table_name = 'user'
-              AND index_name = 'user_email'
-            LIMIT 1
-        """)
-        result = cursor.fetchone()
-        if not result:
-            return "missing"
-        return "non_unique" if result[0] else "unique"
-
-    index_state = None
-    # step 0: inspect current email index state
-    try:
-        index_state = get_email_index_state()
-        if index_state == "unique":
-            logging.info("UNIQUE index on user.email already exists, skipping migration")
-            return
-        if index_state == "non_unique":
-            logging.warning("Found non-unique index user_email on user.email, will replace it with a UNIQUE index")
+            if result and result[0] > 0:
+                logging.info("UNIQUE index on user.email already exists, skipping migration")
+                return
+        else:
+            # Fetch the first index on email: tells us both the name and whether it's unique.
+            # non_unique=0 means unique, non_unique=1 means non-unique.
+            cursor = DB.execute_sql("""
+                SELECT index_name, non_unique
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'user'
+                  AND column_name = 'email'
+                LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if row:
+                index_name, non_unique = row
+                if non_unique == 0:
+                    logging.info("UNIQUE index on user.email already exists, skipping migration")
+                    return
+                # Non-unique index exists (e.g. from old peewee index=True); drop it so
+                # the upcoming ADD UNIQUE INDEX does not hit MySQL error 1061 "Duplicate key name".
+                DB.execute_sql(f"ALTER TABLE `user` DROP INDEX `{index_name}`")
+                logging.info(f"Dropped non-unique index '{index_name}' on user.email before adding unique index")
     except Exception as ex:
-        logging.warning("Failed to inspect index state on user.email: %s, continuing with migration", ex)
+        logging.warning(f"Failed to check/prepare email index on user table: {ex}, continuing with migration")
 
     # step 1: rename duplicate rows so the UNIQUE constraint can be applied
     try:
@@ -1670,6 +1667,7 @@ def migrate_db():
     alter_db_column_type(migrator, "canvas_template", "description", JSONField(null=True, default=dict, help_text="Canvas description"))
     alter_db_add_column(migrator, "user_canvas", "canvas_category", CharField(max_length=32, null=False, default="agent_canvas", help_text="agent_canvas|dataflow_canvas", index=True))
     alter_db_add_column(migrator, "canvas_template", "canvas_category", CharField(max_length=32, null=False, default="agent_canvas", help_text="agent_canvas|dataflow_canvas", index=True))
+    alter_db_add_column(migrator, "canvas_template", "canvas_types", ListField(null=True, default=list, help_text="Canvas types"))
     alter_db_add_column(migrator, "knowledgebase", "pipeline_id", CharField(max_length=32, null=True, help_text="Pipeline ID", index=True))
     alter_db_add_column(migrator, "document", "pipeline_id", CharField(max_length=32, null=True, help_text="Pipeline ID", index=True))
     alter_db_add_column(migrator, "knowledgebase", "graphrag_task_id", CharField(max_length=32, null=True, help_text="Gragh RAG task ID", index=True))
@@ -1701,6 +1699,8 @@ def migrate_db():
     alter_db_add_column(migrator, "memory", "tenant_llm_id", IntegerField(null=True, help_text="id in tenant_llm", index=True))
     alter_db_add_column(migrator, "user_canvas_version", "release", BooleanField(null=False, help_text="is released", default=False, index=True))
     alter_db_add_column(migrator, "api_4_conversation", "version_title", CharField(max_length=255, null=True, help_text="canvas version title when session created", index=False))
+    alter_db_column_type(migrator, "document", "size", BigIntegerField(default=0, index=True))
+    alter_db_column_type(migrator, "file", "size", BigIntegerField(default=0, index=True))
     logging.disable(logging.NOTSET)
     # this is after re-enabling logging to allow logging changed user emails
     migrate_add_unique_email(migrator)
