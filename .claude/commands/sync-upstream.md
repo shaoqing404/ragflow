@@ -1,7 +1,16 @@
-# sync-upstream: 从官方上游合并更新到 three_u_0231
+# sync-upstream: RAGFlow 专用 — 从 GitHub Fork 合并上游更新到 three_u_0240，推送至 Gitee
+
+> 适用范围：仅限 `/mnt/e/element_workspace/ragflow` 仓库
+> 工具兼容：Claude Code / Codex CLI 通用
 
 ## 前置条件
 执行前必须阅读 `spec/branch_sync_playbook.md` 获取完整规范。
+
+## 拓扑结构
+```
+GitHub 官方 (infiniflow/ragflow) → GitHub Fork (shaoqing404/ragflow, origin, 只读)
+    → 本地 three_u_0240 → Gitee (GFCM/ragflow, 可写部署目标)
+```
 
 ## 规则（不可违反）
 - **绝不 push 到 origin**（origin 是 READ-ONLY 的 GitHub fork）
@@ -13,7 +22,7 @@
 
 ### 1. 预检
 ```bash
-git checkout three_u_0231
+git checkout three_u_0240
 git status -sb
 ```
 - 工作区必须干净。如有未提交改动，提示用户先 commit 或 stash。
@@ -25,7 +34,7 @@ git fetch origin
 
 ### 3. 检查差异
 ```bash
-git log --oneline three_u_0231..origin/main | head -20
+git log --oneline three_u_0240..origin/main | head -20
 ```
 - 如果无输出，说明已是最新，报告后结束。
 - 如果有输出，列出更新摘要，继续下一步。
@@ -38,7 +47,7 @@ git merge origin/main
 ### 5. 冲突处理（如有）
 1. `git status` 列出冲突文件
 2. 逐文件解决，保留 3U 改动
-3. 如涉及 `docker/.env`、`service_conf.yaml`、`rag/app/naive.py`、`rag/svr/task_executor.py` 等 3U 关键文件 → 参考 `spec/strategy-a-sync/config_merge_guide.md`
+3. 如涉及 `docker/.env`、`conf/service_conf.yaml`、`rag/app/naive.py`、`rag/svr/task_executor.py` 等 3U 关键文件 → 参考 `spec/strategy-a-sync/config_merge_guide.md`
 4. 不确定的冲突 → 暂停并询问用户
 5. `git add <resolved-files>` → `git commit`
 
@@ -56,6 +65,6 @@ git log --oneline -5
 
 ### 8. 推送到 Gitee（需用户确认）
 ```bash
-git push gitee three_u_0231
+git push gitee three_u_0240
 ```
 - 此步骤必须等用户明确批准后才执行。
